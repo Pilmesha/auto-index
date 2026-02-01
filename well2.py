@@ -17,8 +17,21 @@ CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 
 DRIVE_ID = os.getenv("DRIVE_ID")
 ITEM_ID = os.getenv("ITEM_ID")
+REFRESH_TOKEN = os.getenv('REFRESH_TOKEN')
 POLL_INTERVAL = 60  # seconds
 # ==========================================
+def refresh_access_token()-> str:
+    global ACCESS_TOKEN
+    url = "https://accounts.zoho.com/oauth/v2/token"
+    params = {
+        "refresh_token": REFRESH_TOKEN,
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "grant_type": "refresh_token"
+    }
+    resp = requests.post(url, params=params).json()
+    ACCESS_TOKEN = resp["access_token"]
+    return ACCESS_TOKEN
 def get_token():
     url = f"https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0/token"
     data = {
@@ -106,7 +119,7 @@ def get_last_modified(headers):
 
 
 def main():
-    token = get_token()
+    token = get_token() or refresh_access_token()
     headers = {"Authorization": f"Bearer {token}"}
 
     last_seen = None
