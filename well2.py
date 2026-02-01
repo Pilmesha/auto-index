@@ -44,53 +44,46 @@ def assign_ids(file_bytes):
     wb = load_workbook(BytesIO(file_bytes))
     global_ws = wb["__GLOBAL__"]
 
-    # 1️⃣ Read stored global counter
-    stored_last = int(global_ws["B1"].value or 0)
+    # 1️⃣ Collect all existing IDs
+    used_ids = set()
+    for ws in wb.worksheets:
+        if ws.title == "__GLOBAL__":
+            continue
+        for row in ws.iter_rows(min_row=2):
+            name = row[1].value
+            if isinstance(name, str):
+                m = ID_RE.search(name)
+                if m:
+                    used_ids.add(int(m.group(1)))
 
-    # 2️⃣ Scan workbook for existing suffixes
-    max_found = 0
+    # 2️⃣ Start assigning new IDs to missing ones
+    last_id = max(used_ids) if used_ids else 0
+    changed = False
 
     for ws in wb.worksheets:
         if ws.title == "__GLOBAL__":
             continue
-
         for row in ws.iter_rows(min_row=2):
-            name = row[1].value  # Column B
-            if not isinstance(name, str):
+            cell = row[1]
+            name = cell.value
+            if not isinstance(name, str) or not name.strip():
                 continue
 
             m = ID_RE.search(name)
             if m:
-                max_found = max(max_found, int(m.group(1)))
+                continue  # already has ID
 
-    # 3️⃣ TRUE last_id = max of both
-    last_id = max(stored_last, max_found)
+            # Find the lowest available ID
+            new_id = 1
+            while new_id in used_ids:
+                new_id += 1
 
-    changed = False
-
-    # 4️⃣ Assign IDs only where missing
-    for ws in wb.worksheets:
-        if ws.title == "__GLOBAL__":
-            continue
-
-        for row in ws.iter_rows(min_row=2):
-            cell = row[1]  # Column B
-            name = cell.value
-
-            if not isinstance(name, str) or not name.strip():
-                continue
-
-            # Remove any trailing malformed suffix like _123 or _001_extra
-            clean_name = re.sub(r"_(\d+).*?$", "", name)
-
-            if ID_RE.search(name):
-                continue
-
-            last_id += 1
-            cell.value = f"{clean_name}_{last_id:04d}"
+            used_ids.add(new_id)
+            cell.value = f"{name}_{new_id:04d}"
             changed = True
+            last_id = max(last_id, new_id)
 
-    # 5️⃣ Persist correct global counter
+    # 3️⃣ Persist correct global counter
     if changed:
         global_ws["B1"].value = last_id
         out = BytesIO()
@@ -99,6 +92,18 @@ def assign_ids(file_bytes):
         return out.read(), last_id
 
     return None, last_id
+
+    # 4️⃣ Persist correct global counter
+    last_id = len(all_names)
+    if changed:
+        global_ws["B1"].value = last_id
+        out = BytesIO()
+        wb.save(out)
+        out.seek(0)
+        return out.read(), last_id
+
+    return None, last_id
+
 
 def get_last_modified(headers):
     url = f"https://graph.microsoft.com/v1.0/drives/{DRIVE_ID}/items/{ITEM_ID}"
