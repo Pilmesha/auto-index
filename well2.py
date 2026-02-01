@@ -4,7 +4,11 @@ from io import BytesIO
 from openpyxl import load_workbook
 import re
 import os
+from flask import Flask
+import threading
 # ================= CONFIG =================
+app = Flask(__name__)
+threading.Thread(daemon=True).start()
 TENANT_ID = os.getenv("TENANT_ID")
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
@@ -141,6 +145,9 @@ def main():
 
         time.sleep(POLL_INTERVAL)
 
+@app.route("/")
+def index():
+    return "Excel watcher running ✅"
 
 if __name__ == "__main__":
-    main()
+    app.run(host="0.0.0.0", port=8080)
