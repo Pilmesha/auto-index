@@ -6,9 +6,11 @@ import re
 import os
 from flask import Flask
 import threading
+from dotenv import load_dotenv
 # ================= CONFIG =================
 app = Flask(__name__)
-threading.Thread(daemon=True).start()
+
+load_dotenv()
 TENANT_ID = os.getenv("TENANT_ID")
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
@@ -97,17 +99,6 @@ def assign_ids(file_bytes):
 
     return None, last_id
 
-    # 4️⃣ Persist correct global counter
-    last_id = len(all_names)
-    if changed:
-        global_ws["B1"].value = last_id
-        out = BytesIO()
-        wb.save(out)
-        out.seek(0)
-        return out.read(), last_id
-
-    return None, last_id
-
 
 def get_last_modified(headers):
     url = f"https://graph.microsoft.com/v1.0/drives/{DRIVE_ID}/items/{ITEM_ID}"
@@ -145,6 +136,7 @@ def main():
 
         time.sleep(POLL_INTERVAL)
 
+threading.Thread(target=main, daemon=True).start()
 @app.route("/")
 def index():
     return "Excel watcher running ✅"
