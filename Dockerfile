@@ -9,4 +9,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Run your script
-CMD ["python", "well2.py"]
+CMD ["gunicorn", "well2:app", "--workers", "1", "--threads", "4", "--timeout", "120"]

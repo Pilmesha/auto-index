@@ -116,17 +116,28 @@ def download_excel():
     resp = request_with_retry("GET", url, headers=graph_headers())
 
     return resp.content
+def get_file_metadata():
+    url = f"https://graph.microsoft.com/v1.0/drives/{DRIVE_ID}/items/{ITEM_ID}"
 
+    resp = request_with_retry("GET", url, headers=graph_headers())
+    data = resp.json()
 
-def upload_excel(data):
+    return data["lastModifiedDateTime"], data["eTag"]
+
+def upload_excel(data, etag):
     url = f"https://graph.microsoft.com/v1.0/drives/{DRIVE_ID}/items/{ITEM_ID}/content"
 
-    request_with_retry(
-        "PUT",
-        url,
-        headers=graph_headers(),
-        data=data,
-    )
+    headers = graph_headers()
+    headers["If-Match"] = etag   # 🔥 THE MAGIC LINE
+
+    resp = requests.put(url, headers=headers, data=data, timeout=30)
+
+    if resp.status_code == 412:
+        logging.warning("Upload rejected — file changed during processing. Skipping.")
+        return False
+
+    resp.raise_for_status()
+    return True
 
 
 # ================= EXCEL =================
@@ -191,11 +202,12 @@ def assign_ids(file_bytes):
 def watcher_loop():
     logging.info("Watcher started.")
 
-    last_seen = None
+    # Prevent immediate reprocessing on deploy
+    last_seen, _ = get_file_metadata()
 
     while True:
         try:
-            modified = get_last_modified()
+            modified, etag = get_file_metadata()
 
             if modified != last_seen:
                 logging.info("File changed. Processing...")
@@ -204,17 +216,23 @@ def watcher_loop():
                 result, last_id = assign_ids(file_bytes)
 
                 if result:
-                    upload_excel(result)
-                    logging.info(f"IDs assigned. Last ID = {last_id}")
+                    success = upload_excel(result, etag)
+
+                    if success:
+                        logging.info(f"IDs assigned safely. Last ID = {last_id}")
+                        last_seen = modified
+                    else:
+                        logging.warning("Upload skipped — file changed during processing.")
+
                 else:
                     logging.info("No changes needed.")
-
-                last_seen = modified
+                    last_seen = modified
 
         except Exception:
             logging.exception("Watcher crashed but will restart loop.")
 
         time.sleep(POLL_INTERVAL)
+
 
 
 # ⭐ START THREAD SAFELY

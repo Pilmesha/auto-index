@@ -2,3 +2,4 @@ requests
 openpyxl
 flask
 python-dotenv
+gunicorn
