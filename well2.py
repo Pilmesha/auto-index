@@ -199,62 +199,22 @@ def assign_ids(file_bytes):
 
 # ================= WATCHER =================
 
-def watcher_loop():
-    logging.info("Watcher started.")
+def run_once():
+    logging.info("Cron run started.")
 
-    # Prevent immediate reprocessing on deploy
-    last_seen, _ = get_file_metadata()
+    modified, etag = get_file_metadata()
+    file_bytes = download_excel()
+    result, last_id = assign_ids(file_bytes)
 
-    while True:
-        try:
-            modified, etag = get_file_metadata()
+    if result:
+        success = upload_excel(result, etag)
+        if success:
+            logging.info(f"IDs assigned safely. Last ID = {last_id}")
+    else:
+        logging.info("No changes needed.")
 
-            if modified != last_seen:
-                logging.info("File changed. Processing...")
-
-                file_bytes = download_excel()
-                result, last_id = assign_ids(file_bytes)
-
-                if result:
-                    success = upload_excel(result, etag)
-
-                    if success:
-                        logging.info(f"IDs assigned safely. Last ID = {last_id}")
-                        last_seen = modified
-                    else:
-                        logging.warning("Upload skipped — file changed during processing.")
-
-                else:
-                    logging.info("No changes needed.")
-                    last_seen = modified
-
-        except Exception:
-            logging.exception("Watcher crashed but will restart loop.")
-
-        time.sleep(POLL_INTERVAL)
+    logging.info("Cron run finished.")
 
 
-
-# ⭐ START THREAD SAFELY
-def start_watcher():
-    if not os.environ.get("WATCHER_STARTED"):
-        os.environ["WATCHER_STARTED"] = "1"
-
-        thread = threading.Thread(target=watcher_loop, daemon=True)
-        thread.start()
-
-        logging.info("Background watcher launched.")
-
-
-start_watcher()
-
-# ================= ROUTES =================
-
-@app.route("/")
-def home():
-    return "Watcher running ✅"
-
-
-@app.route("/health")
-def health():
-    return {"status": "ok"}
+if __name__ == "__main__":
+    run_once()
